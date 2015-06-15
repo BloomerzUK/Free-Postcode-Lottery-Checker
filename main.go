@@ -18,6 +18,7 @@ var logger service.Logger
 //   Handle service controls (optional).
 //   Run the service.
 func main() {
+
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
 

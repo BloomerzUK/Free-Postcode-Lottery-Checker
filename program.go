@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bitbucket.org/nazwa/free-postcode-lottery-checker/config"
 	"bitbucket.org/nazwa/free-postcode-lottery-checker/fpl"
+	"fmt"
 	"github.com/kardianos/service"
 	"github.com/keighl/mandrill"
-	"log"
+	"github.com/stvp/rollbar"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Program structures.
@@ -37,14 +40,24 @@ func (p *program) Start(s service.Service) error {
 
 func (p *program) init() {
 
+	config.LoadConfig("/config.json")
+
+	// Start with external services
+	p.mailer = mandrill.ClientWithKey(config.Config.Services.Mandrill.Key)
+	rollbar.Environment = config.Config.Services.Rollbar.Environment
+	rollbar.Token = config.Config.Services.Rollbar.Token
+
+	// Now the games
 	p.daily = &fpl.Daily{}
 	p.stockpot = &fpl.Stockpot{}
 	p.survey = &fpl.Survey{}
 
+	// And finally the main worker
 	p.client = fpl.NewClient(p.daily, p.stockpot, p.survey)
-	p.client.Login()
+	if err := p.client.Login(); err != nil {
+		logger.Error(err)
+	}
 
-	p.mailer = mandrill.ClientWithKey("o_3WECMMBJ3qouJqMKi0Fg")
 }
 
 func (p *program) run() error {
@@ -54,13 +67,32 @@ func (p *program) run() error {
 
 	p.init()
 
-	p.client.Run()
-	p.SendMail()
+	ticker := time.Tick(3 * time.Hour)
+
+	for {
+		logger.Info("Fetching new results")
+		if err := p.client.Run(); err != nil {
+			logger.Error(err)
+			rollbar.Error(rollbar.ERR, err)
+		}
+		if p.client.Changed() {
+			logger.Info("New results detected. Sending email...")
+			p.SendMail()
+		}
+		logger.Info("Going back to sleep")
+		// Sleep until the next update time
+		select {
+		case <-ticker:
+		}
+	}
 
 	return nil
 }
 
 func (p *program) SendMail() {
+
+	win := p.client.CheckWin(config.Config.Target)
+
 	att := &mandrill.Attachment{
 		Type:    "image/png",
 		Name:    "daily",
@@ -68,33 +100,52 @@ func (p *program) SendMail() {
 	}
 
 	message := &mandrill.Message{}
-	message.Subject = "Postcode Lottery"
+	if win {
+		message.Subject = "WIN --- Postcode Lottery"
+	} else {
+		message.Subject = "Postcode Lottery"
+	}
 	message.InlineCSS = true
 	message.Subaccount = "fpl"
+
+	message.FromEmail = "chat@dimes.io"
+	message.FromName = "FPL"
 
 	message.Attachments = make([]*mandrill.Attachment, 1)
 	message.Attachments[0] = att
 
-	message.AddRecipient("zorleq@hotmail.com", "Maciej", "to")
+	message.AddRecipient("maciej@tidepayments.com", "Maciej", "to")
 
 	// Global vars
 
 	templateVars := map[string]string{}
-	templateVars["stockpot"] = strings.Join(p.stockpot.GetPostcodes(), "<br>")
-	templateVars["survey"] = strings.Join(p.survey.GetPostcodes(), "<br>")
+	if p.stockpot.Changed() {
+		templateVars["stockpot"] = strings.Join(p.stockpot.GetPostcodes(), "<br>")
+	}
+	if p.survey.Changed() {
+		templateVars["survey"] = p.survey.GetPostcode()
+	}
 	message.GlobalMergeVars = mandrill.MapToVars(templateVars)
 
 	templateContent := map[string]string{}
 	responses, err := p.mailer.MessagesSendTemplate(message, "fpl", templateContent)
 
 	if err != nil {
-		log.Println(err)
+		rollbar.Error(rollbar.ERR, err)
+		if config.Config.Debug {
+			logger.Error(err)
+		}
 	}
 
 	for _, response := range responses {
 		if strings.EqualFold(response.Status, "rejected") || strings.EqualFold(response.Status, "invalid") {
-			log.Println(response.RejectionReason)
+			apiErrorField := &rollbar.Field{Name: "Response", Data: response}
+			rollbar.Error(rollbar.ERR, fmt.Errorf("Email send failed"), apiErrorField)
+			if config.Config.Debug {
+				logger.Error(response)
+			}
 		}
+
 	}
 }
 

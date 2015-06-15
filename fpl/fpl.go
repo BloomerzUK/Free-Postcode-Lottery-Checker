@@ -1,7 +1,6 @@
 package fpl
 
 import (
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -9,6 +8,8 @@ import (
 
 type FPLInterface interface {
 	GetUrl() string
+	Changed() bool
+	Check(string) bool
 	Parse(*http.Response) error
 }
 
@@ -47,9 +48,8 @@ func (f *FPLClient) Fetch(targetUrl string) (*http.Response, error) {
 	f.request.URL, _ = url.Parse(targetUrl)
 
 	diff := time.Now().Sub(f.time)
-	if diff < 2*time.Second {
-		log.Println("Delaying fetch")
-		time.Sleep(2*time.Second - diff)
+	if diff < 5*time.Second {
+		time.Sleep(5*time.Second - diff)
 	}
 	defer func() {
 		f.time = time.Now()
@@ -73,18 +73,36 @@ func (f *FPLClient) Login() error {
 	return nil
 }
 
-func (f *FPLClient) Run() {
-
+func (f *FPLClient) Run() error {
 	for _, game := range f.games {
 		if resp, err := f.Fetch(game.GetUrl()); err == nil {
 			if err = game.Parse(resp); err != nil {
-				log.Println(err)
+				return err
 			}
 		} else {
-
-			log.Println(err)
+			return err
 		}
-
 	}
+	return nil
+}
 
+func (f *FPLClient) Changed() bool {
+	for _, game := range f.games {
+		res := game.Changed()
+		if res {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *FPLClient) CheckWin(postcode string) bool {
+
+	for _, game := range f.games {
+		res := game.Check(postcode)
+		if res {
+			return true
+		}
+	}
+	return false
 }

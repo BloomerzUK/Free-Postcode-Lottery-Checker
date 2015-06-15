@@ -5,11 +5,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 type Survey struct {
-	postcodes []string
-	temp      string
+	postcode string
+	oldCode  string
+	temp     string
 }
 
 func (d *Survey) GetUrl() string {
@@ -21,19 +23,25 @@ func (d *Survey) Parse(response *http.Response) error {
 
 	html, _ := ioutil.ReadAll(response.Body)
 
-	postcodes := pattern.FindAllSubmatch(html, 10)
-	if postcodes == nil {
+	d.oldCode = d.postcode
+	postcode := pattern.FindSubmatch(html)
+	if postcode == nil {
 		return fmt.Errorf("No matches found")
 	}
-	d.postcodes = make([]string, len(postcodes))
 
-	for _A, tag := range postcodes {
-		d.postcodes[_A] = string(tag[1])
-	}
+	d.postcode = string(postcode[1])
 
 	return nil
 }
 
-func (d *Survey) GetPostcodes() []string {
-	return d.postcodes
+func (d *Survey) GetPostcode() string {
+	return d.postcode
+}
+
+func (d *Survey) Changed() bool {
+	return !strings.EqualFold(d.postcode, d.oldCode)
+}
+
+func (d *Survey) Check(postcode string) bool {
+	return strings.EqualFold(postcode, d.postcode)
 }
