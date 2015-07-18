@@ -92,12 +92,7 @@ func (p *program) run() error {
 func (p *program) SendMail() {
 
 	win := p.client.CheckWin(config.Config.Target)
-
-	att := &mandrill.Attachment{
-		Type:    "image/png",
-		Name:    "daily",
-		Content: p.daily.GetEncodedImage(),
-	}
+	templateVars := map[string]string{}
 
 	message := &mandrill.Message{}
 	if win {
@@ -111,14 +106,22 @@ func (p *program) SendMail() {
 	message.FromEmail = "chat@dimes.io"
 	message.FromName = "FPL"
 
-	message.Attachments = make([]*mandrill.Attachment, 1)
-	message.Attachments[0] = att
-
 	message.AddRecipient("maciej@tidepayments.com", "Maciej", "to")
+
+	if p.daily.Changed() {
+
+		att := &mandrill.Attachment{
+			Type:    "image/png",
+			Name:    "daily",
+			Content: p.daily.GetEncodedImage(),
+		}
+		templateVars["daily"] = "CHANGED"
+		message.Attachments = make([]*mandrill.Attachment, 1)
+		message.Attachments[0] = att
+	}
 
 	// Global vars
 
-	templateVars := map[string]string{}
 	if p.stockpot.Changed() {
 		templateVars["stockpot"] = strings.Join(p.stockpot.GetPostcodes(), "<br>")
 	}
