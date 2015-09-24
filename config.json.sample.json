@@ -1,0 +1,19 @@
+{
+    	"Debug": true,
+	"Target": "my@email.com",
+	"Services": {
+		"Mandrill": {
+			"Key": "",
+			"Account": "fpl",
+			"Sender": {
+				"Name": "",
+				"Email": ""
+			}
+		},
+		"Rollbar": {
+			"Token": "",
+			"Environment": "Development"		
+		}
+	}
+
+}

@@ -4,12 +4,17 @@ import (
 	"bitbucket.org/nazwa/free-postcode-lottery-checker/config"
 	"bitbucket.org/nazwa/free-postcode-lottery-checker/fpl"
 	"fmt"
+	"github.com/kardianos/osext"
 	"github.com/kardianos/service"
 	"github.com/keighl/mandrill"
 	"github.com/stvp/rollbar"
 	"runtime"
 	"strings"
 	"time"
+)
+
+var (
+	ROOT_DIR string
 )
 
 // Program structures.
@@ -39,8 +44,9 @@ func (p *program) Start(s service.Service) error {
 }
 
 func (p *program) init() {
+	ROOT_DIR, _ = osext.ExecutableFolder()
 
-	config.LoadConfig("/config.json")
+	config.LoadConfig(ROOT_DIR + "/config.json")
 
 	// Start with external services
 	p.mailer = mandrill.ClientWithKey(config.Config.Services.Mandrill.Key)
@@ -103,10 +109,10 @@ func (p *program) SendMail() {
 	message.InlineCSS = true
 	message.Subaccount = "fpl"
 
-	message.FromEmail = "chat@dimes.io"
-	message.FromName = "FPL"
+	message.FromEmail = config.Config.Services.Mandrill.Sender.Email
+	message.FromName = config.Config.Services.Mandrill.Sender.Name
 
-	message.AddRecipient("maciej@tidepayments.com", "Maciej", "to")
+	message.AddRecipient(config.Config.Target, config.Config.Target, "to")
 
 	if p.daily.Changed() {
 
