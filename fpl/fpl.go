@@ -60,7 +60,7 @@ func (f *FPLClient) Fetch(targetUrl string) (*http.Response, error) {
 
 func (f *FPLClient) Login() error {
 
-	resp, err := f.Fetch("http://freepostcodelottery.com/?reminder=b4ff6706-108b-11e5-ad49-00163ee58471")
+	resp, err := f.Fetch("http://freepostcodelottery.com/?reminder=<<<reminder code>>>")
 	if err != nil {
 		return err
 	}
